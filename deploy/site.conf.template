@@ -1,0 +1,40 @@
+# Only the existing TLS-terminating Nginx may reach this listener.
+geo $realip_remote_addr $trusted_edge {
+  default 0;
+  ${TRUSTED_PROXY_CIDR} 1;
+}
+log_format proxy_rejection 'gateway status=$status proxy_peer=$realip_remote_addr trusted=$trusted_edge forwarded_proto=$http_x_forwarded_proto';
+map $status $log_proxy_rejection {
+  default 0;
+  403 1;
+  400 1;
+}
+server {
+  listen 8080 default_server;
+  server_name _;
+  return 444;
+}
+server {
+  listen 8080;
+  server_name ${PUBLIC_HOST};
+  access_log /dev/stdout proxy_rejection if=$log_proxy_rejection;
+  set_real_ip_from ${TRUSTED_PROXY_CIDR};
+  real_ip_header X-Forwarded-For;
+  real_ip_recursive off;
+  if ($trusted_edge = 0) { return 403 'Gateway rejected proxy source. Check TRUSTED_PROXY_CIDR; see gateway logs.\n'; }
+  if ($http_x_forwarded_proto != https) { return 400; }
+  location = /private { return 308 /private/; }
+  location /private/ {
+    proxy_pass http://private:8000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 150s;
+  }
+  location / {
+    proxy_pass http://public:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+}

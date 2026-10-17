@@ -1,0 +1,20 @@
+# Requires DNS for BOTH hosts and inbound ports 80/443 routed to this server.
+services:
+  public:
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+  private:
+    environment:
+      PRIVATE_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+  gateway:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+      PRIVATE_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    volumes: !override
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config

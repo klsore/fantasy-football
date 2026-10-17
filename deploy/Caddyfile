@@ -1,0 +1,23 @@
+{
+  admin off
+  email {$ACME_EMAIL}
+}
+{$PUBLIC_HOST} {
+  header -Server
+  request_body {
+    max_size 4KB
+  }
+  redir /private /private/ 308
+  handle_path /private/* {
+    reverse_proxy private:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto https
+    }
+  }
+  handle {
+    reverse_proxy public:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto https
+    }
+  }
+}

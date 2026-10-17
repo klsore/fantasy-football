@@ -1,0 +1,11 @@
+# Add to the existing HTTPS virtual host for fantasy.example.com.
+# Configure its TLS certificate using your existing Nginx certificate manager.
+location / {
+    proxy_pass http://PORTAINER_HOST_IP:8088;
+    proxy_set_header Host $host;
+    # Override client-supplied forwarding headers; do not append untrusted input.
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 150s;
+}
+# Restrict port 8088 at the host firewall to the existing Nginx proxy IP.

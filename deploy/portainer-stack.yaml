@@ -1,0 +1,89 @@
+# Paste into a Portainer Docker Standalone stack. Set variables in Portainer.
+services:
+  public:
+    image: registry.example.com/docker-local/fantasy-football:${IMAGE_TAG:-latest}
+    environment:
+      SITE_MODE: public
+      GUNICORN_CMD_ARGS: --no-control-socket
+      PUBLIC_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+      DATA_DIR: /app/state
+      SNAPSHOT_DIR: /snapshots
+    volumes: [public-snapshots:/snapshots:ro, public-state:/app/state]
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 256m
+    restart: unless-stopped
+  private:
+    image: registry.example.com/docker-local/fantasy-football:${IMAGE_TAG:-latest}
+    environment:
+      SITE_MODE: private
+      GUNICORN_CMD_ARGS: --no-control-socket
+      PRIVATE_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+      DATA_DIR: /app/data
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-https://your-resource.services.ai.azure.com/openai/v1/responses}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-6.1-sol}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AI_MONTHLY_REQUEST_LIMIT: ${AI_MONTHLY_REQUEST_LIMIT:-20}
+      AI_COOLDOWN_SECONDS: ${AI_COOLDOWN_SECONDS:-60}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-4096}
+    volumes: [private-data:/app/data]
+    networks: [backend, outbound]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    restart: unless-stopped
+  refresh:
+    image: registry.example.com/docker-local/fantasy-football:${IMAGE_TAG:-latest}
+    command: [python, refresh.py]
+    environment:
+      DATA_DIR: /app/data
+      SNAPSHOT_DIR: /snapshots
+      YAHOO_CLIENT_ID: ${YAHOO_CLIENT_ID:?Set YAHOO_CLIENT_ID}
+      YAHOO_CLIENT_SECRET: ${YAHOO_CLIENT_SECRET:?Set YAHOO_CLIENT_SECRET}
+      YAHOO_REFRESH_TOKEN: ${YAHOO_REFRESH_TOKEN:?Set YAHOO_REFRESH_TOKEN}
+      PUBLIC_LEAGUE_KEY: ${PUBLIC_LEAGUE_KEY:?Set PUBLIC_LEAGUE_KEY}
+      PUBLIC_TEAM_KEY: ${PUBLIC_TEAM_KEY:?Set PUBLIC_TEAM_KEY}
+    volumes: [private-data:/app/data, public-snapshots:/snapshots]
+    networks: [outbound]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      test: [CMD, python, -c, "from pathlib import Path; import time; p=Path('/app/data/private-snapshot.json'); assert p.exists() and time.time()-p.stat().st_mtime<172800"]
+      start_period: 15m
+      interval: 1h
+    restart: unless-stopped
+  gateway:
+    image: registry.example.com/docker-local/fantasy-football-gateway:${IMAGE_TAG:-latest}
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-fantasy.example.com}
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:?Set to your existing Nginx IP/CIDR}
+    ports: ["${LISTEN_IP:-0.0.0.0}:${APP_PORT:-8088}:8080"]
+    networks: [backend, outbound]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 128m
+    restart: unless-stopped
+networks:
+  backend:
+    internal: true
+  outbound:
+volumes:
+  private-data:
+  public-snapshots:
+  public-state:

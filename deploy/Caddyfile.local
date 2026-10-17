@@ -1,0 +1,27 @@
+{
+  admin off
+  auto_https disable_redirects
+}
+https://fantasy.localhost {
+  header -Server
+  tls internal
+  request_body {
+    max_size 4KB
+  }
+  redir /private /private/ 308
+  handle_path /private/* {
+    reverse_proxy private:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto https
+    }
+  }
+  handle {
+    reverse_proxy public:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto https
+    }
+  }
+}
+:80 {
+  redir https://fantasy.localhost:9443{uri} permanent
+}

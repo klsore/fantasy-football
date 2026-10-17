@@ -1,0 +1,83 @@
+services:
+  public:
+    build: .
+    environment:
+      SITE_MODE: public
+      PUBLIC_HOST: fantasy.localhost
+      DATA_DIR: /app/state
+      SNAPSHOT_DIR: /snapshots
+    volumes:
+      - public-snapshots:/snapshots:ro
+      - public-state:/app/state
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 256m
+    restart: unless-stopped
+  private:
+    build: .
+    env_file: .env
+    environment:
+      SITE_MODE: private
+      PRIVATE_HOST: fantasy.localhost
+      DATA_DIR: /app/data
+    volumes:
+      - yahoo-tokens:/app/data
+    networks: [backend, outbound]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    restart: unless-stopped
+  refresh:
+    build: .
+    command: ["python", "refresh.py"]
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+      SNAPSHOT_DIR: /snapshots
+    volumes:
+      - yahoo-tokens:/app/data
+      - public-snapshots:/snapshots
+    networks: [outbound]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; import time; p=Path('/app/data/private-snapshot.json'); assert p.exists() and time.time()-p.stat().st_mtime<172800"]
+      start_period: 15m
+      interval: 1h
+      timeout: 5s
+    restart: unless-stopped
+  gateway:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:9443:443"
+      - "127.0.0.1:8000:80"
+    volumes:
+      - ./deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [backend, outbound]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 256m
+    restart: unless-stopped
+networks:
+  backend:
+    internal: true
+  outbound:
+volumes:
+  yahoo-tokens:
+  public-snapshots:
+  public-state:
+  caddy-data:
+  caddy-config:
